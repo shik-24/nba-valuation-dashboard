@@ -1,7 +1,10 @@
 """League leaderboards — sortable bargains/overpays vs fair / market / production value."""
+import importlib
+
 import streamlit as st
 
 import lib
+importlib.reload(lib)  # Cloud caches imported modules across deploys; reload picks up pushes w/o a reboot.
 
 st.set_page_config(page_title="League Leaderboards", page_icon="🏀", layout="wide")
 st.title("League Leaderboards")

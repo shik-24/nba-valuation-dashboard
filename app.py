@@ -3,9 +3,12 @@
 Run locally:  cd dashboard && streamlit run app.py
 The sidebar exposes the four explorer pages (player / archetype / team / leaderboards).
 """
+import importlib
+
 import streamlit as st
 
 import lib
+importlib.reload(lib)  # Cloud caches imported modules across deploys; reload picks up pushes w/o a reboot.
 
 st.set_page_config(page_title="NBA Valuation", page_icon="🏀", layout="wide")
 

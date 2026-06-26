@@ -1,9 +1,12 @@
 """Player explorer — value lines vs the max, cap-aware verdict, career arc, SHAP 'why', comps."""
+import importlib
+
 import altair as alt
 import pandas as pd
 import streamlit as st
 
 import lib
+importlib.reload(lib)  # Cloud caches imported modules across deploys; reload picks up pushes w/o a reboot.
 
 st.set_page_config(page_title="Player Explorer", page_icon="🏀", layout="wide")
 st.title("Player Explorer")

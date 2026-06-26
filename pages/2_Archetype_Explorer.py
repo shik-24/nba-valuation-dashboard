@@ -1,8 +1,11 @@
 """Archetype explorer — over/underpay, the Stage 4 aging + survival curves, members."""
+import importlib
+
 import altair as alt
 import streamlit as st
 
 import lib
+importlib.reload(lib)  # Cloud caches imported modules across deploys; reload picks up pushes w/o a reboot.
 
 st.set_page_config(page_title="Archetype Explorer", page_icon="🏀", layout="wide")
 st.title("Archetype Explorer")
