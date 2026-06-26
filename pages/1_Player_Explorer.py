@@ -119,10 +119,15 @@ comps_tbl = lib.load_comps()
 if comps_tbl is not None:
     c = comps_tbl[(comps_tbl["PLAYER_ID"] == pid) & (comps_tbl["SEASON"] == season)]
     if not c.empty:
-        keep = [col for col in ["comp_name", "comp_season", "comp_pct_cap", "distance"] if col in c.columns]
-        disp, cfg = lib.value_table(c.assign(SEASON=season)[keep], ["comp_pct_cap"], unit, fixed_season=season)
+        keep = [col for col in ["comp_name", "comp_season", "comp_pct_cap", "comp_vorp", "comp_age",
+                                "comp_usg", "distance"] if col in c.columns]
+        c2 = c[keep].copy()
+        c2["SEASON"] = c2["comp_season"] if "comp_season" in c2.columns else season  # $ uses comp's own season
+        disp, cfg = lib.value_table(c2, ["comp_pct_cap"], unit)
+        disp = disp.drop(columns="SEASON", errors="ignore")
         st.dataframe(disp, hide_index=True, width="stretch", column_config=cfg)
-        st.caption("The actual signings (most-similar first) that drove the kNN comps value.")
+        st.caption("The actual signings (most-similar first) behind the comps value — with **which "
+                   "season** the comp is from and the **VORP / age / usage** that make them similar.")
     else:
         st.info("No comps row for this player-season.")
 else:

@@ -54,6 +54,7 @@ LABELS = {
     "TRAILING_vorp_3Y": "Trailing VORP", "ARCHETYPE_NAME": "Archetype", "PLAYER_NAME": "Player",
     "AGE": "Age", "SEASON": "Season", "YEARS_IN_LEAGUE": "Yrs in league", "N_TRAILING": "Seasons of data",
     "comp_name": "Comp player", "comp_pct_cap": "Comp's salary", "comp_season": "Comp's season",
+    "comp_vorp": "Comp VORP", "comp_age": "Comp age", "comp_usg": "Comp usage %",
     "distance": "Distance (lower = closer)",
 }
 
