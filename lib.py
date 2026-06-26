@@ -6,6 +6,7 @@ deploying is just `git push` -- no DB or Drive dependency. Pure helpers (no Stre
 live below the loaders so they can be unit-tested without a running app.
 """
 from __future__ import annotations
+import html
 import os
 from pathlib import Path
 
@@ -18,6 +19,11 @@ DATA_DIR = Path(os.environ.get("NBA_DASH_DATA", Path(__file__).parent / "data"))
 # Drop prorated / partial-season salary artifacts (10-day, mid-season waivers) from bargain views.
 # These sit below the league minimum %cap and would otherwise masquerade as extreme bargains.
 ACTUAL_FLOOR = 0.01
+
+# Shared 3-color verdict scheme: a contract within ±FAIR_BAND of fair value reads "fair" (amber);
+# beyond it, green = bargain (underpaid), red = overpay. Used by metric cards AND tables everywhere.
+FAIR_BAND = 0.03
+REPLACEMENT_BPM = -2.0   # exited/washed-out value in the Stage 4 combined aging curve.
 
 # NBA salary cap by season (same dict the notebooks use) -> %cap to $ for readability.
 SALARY_CAP = {
@@ -247,15 +253,48 @@ def pretty_feature(name: str) -> str:
 
 
 def color_surplus(disp: pd.DataFrame, surplus_cols):
-    """Style: surplus columns green when positive (bargain), red when negative (overpay)."""
+    """Style: surplus columns green when a bargain, red when an overpay, amber when within
+    ±FAIR_BAND of fair (the same 3-color scheme the metric cards use)."""
     cols = [c for c in surplus_cols if c in disp.columns]
 
     def _c(v):
-        if pd.isna(v) or v == 0:
+        if pd.isna(v):
             return ""
+        if abs(v) < FAIR_BAND:
+            return "color:#b8860b;font-weight:600"   # amber = fair
         return "color:#1a7f37;font-weight:600" if v > 0 else "color:#c0392b;font-weight:600"
 
     return disp.style.map(_c, subset=cols) if cols else disp.style
+
+
+# ─────────────────────── shared verdict coloring (cards + tables) ───────────────────────
+def surplus_bg(surplus: float | None, full_scale: float = 0.15) -> str:
+    """Background color for a surplus (value − pay): amber when within ±FAIR_BAND of fair,
+    else green (bargain) / red (overpay) with opacity scaling to magnitude (capped at full_scale).
+    Returns 'transparent' for a missing surplus."""
+    if surplus is None or pd.isna(surplus):
+        return "transparent"
+    if abs(surplus) < FAIR_BAND:
+        return "rgba(212,160,23,0.20)"               # amber = fair
+    alpha = 0.12 + 0.45 * min(abs(surplus) / full_scale, 1.0)
+    rgb = "26,127,55" if surplus > 0 else "192,57,43"  # green bargain / red overpay
+    return f"rgba({rgb},{alpha:.2f})"
+
+
+def metric_card(container, label: str, value: str, surplus: float | None = None,
+                tooltip: str | None = None, full_scale: float = 0.15) -> None:
+    """A st.metric-styled card with a color-coded background by `surplus` (None = neutral).
+    Hover shows `tooltip` via the native title attribute."""
+    bg = surplus_bg(surplus, full_scale) if surplus is not None else "transparent"
+    tip = f' title="{html.escape(tooltip)}"' if tooltip else ""
+    container.markdown(
+        f'<div{tip} style="background:{bg};border:1px solid rgba(0,0,0,0.06);border-radius:10px;'
+        f'padding:10px 12px;min-height:84px;">'
+        f'<div style="font-size:0.8rem;color:#666;line-height:1.3;">{html.escape(label)}</div>'
+        f'<div style="font-size:1.5rem;font-weight:600;line-height:1.5;">{html.escape(str(value))}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 # ─────────────────────────── pure helpers (testable) ───────────────────────────

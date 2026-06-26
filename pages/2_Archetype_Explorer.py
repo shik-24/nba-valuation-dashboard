@@ -18,27 +18,38 @@ arch = c1.selectbox("Archetype", sorted(val["ARCHETYPE_NAME"].unique()), help=li
 season = c2.selectbox("Season", sorted(val["SEASON"].unique(), reverse=True), help=lib.HELP["season"])
 
 members = val[(val["ARCHETYPE_NAME"] == arch) & (val["SEASON"] == season)]
-all_seasons = val[val["ARCHETYPE_NAME"] == arch]
 
 m1, m2, m3, m4 = st.columns(4)
 m1.metric(f"Members ({season})", len(members), help="Players in this role this season.")
-m2.metric("Mean surplus vs fair", f"{all_seasons['SURPLUS_FAIR'].mean():+.1%}",
-          help="Average fair value − pay across all seasons. Positive = the market underpays this role; "
-               "negative = it pays a premium (overpays).")
-m3.metric("Mean surplus vs value", f"{all_seasons['SURPLUS_VALUE'].mean():+.1%}",
-          help="Average uncapped production worth − pay. Positive = paid below production worth.")
-m4.metric("% underpaid", f"{(all_seasons['SURPLUS_FAIR'] > 0).mean():.0%}",
-          help="Share of this role's player-seasons paid below fair value (a bargain).")
+if members.empty:
+    m2.metric("Mean surplus vs fair", "—")
+    m3.metric("Mean surplus vs value", "—")
+    m4.metric("% underpaid", "—")
+else:
+    m2.metric("Mean surplus vs fair", f"{members['SURPLUS_FAIR'].mean():+.1%}",
+              help=f"Average fair value − pay for this role in {season}. Positive = the market "
+                   "underpays this role; negative = it pays a premium (overpays).")
+    m3.metric("Mean surplus vs value", f"{members['SURPLUS_VALUE'].mean():+.1%}",
+              help=f"Average uncapped production worth − pay for this role in {season}. "
+                   "Positive = paid below production worth.")
+    m4.metric("% underpaid", f"{(members['SURPLUS_FAIR'] > 0).mean():.0%}",
+              help=f"Share of this role paid below fair value (a bargain) in {season}.")
 
 left, right = st.columns(2)
 with left:
     st.subheader("Aging curve")
-    a = aging[aging["ARCHETYPE_NAME"] == arch]
+    a = aging[aging["ARCHETYPE_NAME"] == arch].copy()
     if a.empty:
         st.info("No aging curve for this archetype.")
     else:
+        # The drawn line is the washout-blended BPM_COMBINED, so the band must wrap THAT curve, not
+        # the conditional one. Push the conditional CI through the same blend (combined =
+        # cond·P_active + replacement·(1−P_active)) so the line always sits inside the band.
+        p = a["P_ACTIVE"]
+        a["COMB_LO"] = a["BPM_COND_LO"] * p + lib.REPLACEMENT_BPM * (1 - p)
+        a["COMB_HI"] = a["BPM_COND_HI"] * p + lib.REPLACEMENT_BPM * (1 - p)
         band = alt.Chart(a).mark_area(opacity=0.18).encode(
-            x=alt.X("AGE:Q", title="Age"), y=alt.Y("BPM_COND_LO:Q", title="BPM"), y2="BPM_COND_HI:Q")
+            x=alt.X("AGE:Q", title="Age"), y=alt.Y("COMB_LO:Q", title="BPM"), y2="COMB_HI:Q")
         line = alt.Chart(a).mark_line(point=True, color="#1f77b4").encode(
             x="AGE:Q", y=alt.Y("BPM_COMBINED:Q", title="BPM"),
             tooltip=[alt.Tooltip("AGE:Q", title="Age"), alt.Tooltip("BPM_COMBINED:Q", title="BPM", format=".2f")])

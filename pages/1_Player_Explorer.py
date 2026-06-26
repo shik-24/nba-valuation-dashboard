@@ -30,21 +30,29 @@ def fmt(pct: float) -> str:
     return f"{pct:.1%}"
 
 
-# ── current-season headline: all five values + max ──
-st.subheader(f"{player} — {season}  ·  {row['ARCHETYPE_NAME']}  ·  age {row['AGE']:.0f}")
-cards = [("Actual", "ACTUAL_PCT_CAP", "actual"), ("Market", "MARKET_PCT_CAP", "market"),
-         ("Comps", "TRUE_PCT_CAP", "comps"), ("Production value", "PRODUCTION_VALUE_PCT_CAP", "production_value"),
-         ("Fair", "MARKET_FAIR_PCT_CAP", "fair"), ("Max", "MAX_PCT_CAP", "max")]
-for col, (label, c, hk) in zip(st.columns(6), cards):
-    col.metric(label, fmt(row[c]), help=lib.HELP[hk])
+# ── current-season headline: all five values + max, each tinted by its gap vs pay ──
+badge = "  ·  ⭐ Max player (worth ≥ his max)" if row["IS_MAX_PLAYER"] == 1 else ""
+st.subheader(f"{player} — {season}  ·  {row['ARCHETYPE_NAME']}  ·  age {row['AGE']:.0f}{badge}")
 
+# Verdict (fair − pay, production − pay) lives on the Actual card's hover tooltip.
 v_fair, v_val = lib.verdict(row["SURPLUS_FAIR"]), lib.verdict(row["SURPLUS_VALUE"])
-badge = "  ·  ⭐ **Max player** (worth ≥ his max)" if row["IS_MAX_PLAYER"] == 1 else ""
-st.markdown(
-    f"**vs fair market:** {v_fair} ({row['SURPLUS_FAIR']:+.1%} cap)  ·  "
-    f"**vs production worth:** {v_val} ({row['SURPLUS_VALUE']:+.1%} cap){badge}"
-)
-st.caption("Surplus = fair value − pay, so **+ (green) = underpaid bargain**, − (red) = overpaid.")
+verdict_tip = (f"vs fair market: {v_fair} ({row['SURPLUS_FAIR']:+.1%} cap) · "
+               f"vs production worth: {v_val} ({row['SURPLUS_VALUE']:+.1%} cap)")
+
+# (label, value column, surplus-for-color, tooltip). Max is a CBA ceiling → neutral (no surplus).
+cards = [
+    ("Actual", "ACTUAL_PCT_CAP", row["SURPLUS_FAIR"], verdict_tip),
+    ("Market", "MARKET_PCT_CAP", row["SURPLUS_MARKET"], lib.HELP["market"]),
+    ("Comps", "TRUE_PCT_CAP", row["TRUE_PCT_CAP"] - row["ACTUAL_PCT_CAP"], lib.HELP["comps"]),
+    ("Production value", "PRODUCTION_VALUE_PCT_CAP", row["SURPLUS_VALUE"], lib.HELP["production_value"]),
+    ("Fair", "MARKET_FAIR_PCT_CAP", row["SURPLUS_FAIR"], lib.HELP["fair"]),
+    ("Max", "MAX_PCT_CAP", None, lib.HELP["max"]),
+]
+for col, (label, c, surplus, tip) in zip(st.columns(6), cards):
+    lib.metric_card(col, label, fmt(row[c]), surplus=surplus, tooltip=tip)
+
+st.caption("Card color = value vs pay: **green = bargain**, **red = overpay**, **amber = fair** "
+           "(within ±3% of cap); deeper color = bigger gap. Hover **Actual** for the verdict.")
 
 with st.expander("ℹ️ How to read these numbers"):
     st.markdown(

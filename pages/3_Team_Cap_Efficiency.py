@@ -34,8 +34,8 @@ m1, m2, m3, m4 = st.columns(4)
 m1.metric("Players valued", len(roster), help="Roster players with enough recent history to value.")
 m2.metric("Payroll (% cap)", f"{roster['ACTUAL_PCT_CAP'].sum():.0%}", help=lib.HELP["payroll"])
 s_fair = roster["SURPLUS_FAIR"].sum()
-m3.metric("Surplus vs fair", "Underpaid" if s_fair > 0 else "Overpaid", delta=f"{s_fair:+.0%} cap",
-          help=lib.HELP["team_surplus"])
+lib.metric_card(m3, "Surplus vs fair", f"{s_fair:+.0%} cap", surplus=s_fair,
+                tooltip=lib.HELP["team_surplus"], full_scale=0.5)
 m4.metric("Rank vs league", f"#{rank} / {len(team_tot)}", delta=f"{this_tot - lg_avg:+.0%} vs avg team",
           help="Where this roster's total fair-surplus ranks leaguewide. Leaguewide everyone reads "
                "'underpaid' vs uncapped value, so rank/vs-average is the honest signal, not the raw sign.")
