@@ -13,13 +13,13 @@ st.title("🏀 NBA Player Valuation & Contract Efficiency")
 st.caption(
     "Three valuations of every player-season (all in % of the salary cap): a **market** price "
     "(what the market pays), a **comps** value (what similar players earn), and an uncapped "
-    "**production value** (what they're worth — can exceed the max). Surplus = actual − fair."
+    "**production value** (what they're worth — can exceed the max). Surplus = fair value − pay."
 )
 
 lib.require_data()
 unit = lib.unit_toggle()
 val = lib.load_valuations()
-season = lib.latest_season(val)
+season = st.selectbox("Season", sorted(val["SEASON"].unique(), reverse=True), help=lib.HELP["season"])
 cur = val[val["SEASON"] == season]
 
 c1, c2, c3, c4 = st.columns(4)
@@ -36,18 +36,17 @@ st.markdown(
 
 st.divider()
 gated = cur[cur["ACTUAL_PCT_CAP"] >= lib.ACTUAL_FLOOR]
-left, right = st.columns(2)
 show = ["PLAYER_NAME", "ARCHETYPE_NAME", "ACTUAL_PCT_CAP", "MARKET_FAIR_PCT_CAP", "SURPLUS_FAIR"]
 vcols = ["ACTUAL_PCT_CAP", "MARKET_FAIR_PCT_CAP", "SURPLUS_FAIR"]
+left, right = st.columns(2)
 with left:
     st.subheader(f"Biggest bargains · {season}")
-    disp, cfg = lib.value_table(gated.nsmallest(10, "SURPLUS_FAIR")[show], vcols, unit, fixed_season=season)
-    st.dataframe(disp, hide_index=True, width="stretch", column_config=cfg)
+    disp, cfg = lib.value_table(gated.nlargest(10, "SURPLUS_FAIR")[show], vcols, unit, fixed_season=season)
+    st.dataframe(lib.color_surplus(disp, ["SURPLUS_FAIR"]), hide_index=True, width="stretch", column_config=cfg)
 with right:
     st.subheader(f"Biggest overpays · {season}")
-    disp, cfg = lib.value_table(gated.nlargest(10, "SURPLUS_FAIR")[show], vcols, unit, fixed_season=season)
-    st.dataframe(disp, hide_index=True, width="stretch", column_config=cfg)
+    disp, cfg = lib.value_table(gated.nsmallest(10, "SURPLUS_FAIR")[show], vcols, unit, fixed_season=season)
+    st.dataframe(lib.color_surplus(disp, ["SURPLUS_FAIR"]), hide_index=True, width="stretch", column_config=cfg)
 
-st.caption("Surplus vs the **cap-aware fair value** (the market pays the lesser of worth and the max). "
-           "Negative = underpaid (bargain), positive = overpaid. "
-           f"Rows below {lib.ACTUAL_FLOOR:.0%} of cap (prorated/10-day deals) are filtered out.")
+st.caption("Surplus = **cap-aware fair value − pay**. **+ (green) = underpaid bargain**, − (red) = "
+           f"overpaid. Rows below {lib.ACTUAL_FLOOR:.0%} of cap (prorated/10-day deals) are filtered out.")

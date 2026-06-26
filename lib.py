@@ -30,14 +30,32 @@ SALARY_CAP = {
 # Canonical value columns (post Stage 5c) + the derived cap-aware fair value.
 VALUE_COLS = {
     "ACTUAL_PCT_CAP": "Actual",
-    "MARKET_PCT_CAP": "Market (model)",
+    "MARKET_PCT_CAP": "Market",
     "TRUE_PCT_CAP": "Comps",
     "PRODUCTION_VALUE_PCT_CAP": "Production value",
-    "MARKET_FAIR_PCT_CAP": "Fair (cap-aware)",
-    "MAX_PCT_CAP": "Max line",
+    "MARKET_FAIR_PCT_CAP": "Fair",
+    "MAX_PCT_CAP": "Max",
 }
-# Lines drawn on the player-page chart (kept to 4 for readability).
-CHART_COLS = ["ACTUAL_PCT_CAP", "MARKET_PCT_CAP", "PRODUCTION_VALUE_PCT_CAP", "MAX_PCT_CAP"]
+# Lines drawn on the player-page chart, with explicit colors (label -> hex).
+CHART_COLS = ["ACTUAL_PCT_CAP", "MARKET_PCT_CAP", "TRUE_PCT_CAP", "PRODUCTION_VALUE_PCT_CAP", "MAX_PCT_CAP"]
+LINE_COLORS = {
+    "Actual": "#2e9e3f",            # green, drawn thicker
+    "Market": "#1f77b4",            # blue
+    "Comps": "#d4a017",             # gold
+    "Production value": "#ff7f0e",  # orange
+    "Max": "#777777",              # gray, dashed
+}
+
+# Human-readable column headers (item: tables/charts shouldn't show variable names).
+LABELS = {
+    "ACTUAL_PCT_CAP": "Actual", "MARKET_PCT_CAP": "Market", "TRUE_PCT_CAP": "Comps",
+    "PRODUCTION_VALUE_PCT_CAP": "Production value", "MARKET_FAIR_PCT_CAP": "Fair", "MAX_PCT_CAP": "Max",
+    "SURPLUS_FAIR": "Surplus vs fair", "SURPLUS_MARKET": "Surplus vs market", "SURPLUS_VALUE": "Surplus vs value",
+    "TRAILING_vorp_3Y": "Trailing VORP", "ARCHETYPE_NAME": "Archetype", "PLAYER_NAME": "Player",
+    "AGE": "Age", "SEASON": "Season", "YEARS_IN_LEAGUE": "Yrs in league", "N_TRAILING": "Seasons of data",
+    "comp_name": "Comp player", "comp_pct_cap": "Comp's salary", "comp_season": "Comp's season",
+    "distance": "Distance (lower = closer)",
+}
 
 # ── Plain-language tooltips (audience: basketball fans, not data scientists) ──
 # Widgets (st.metric / st.selectbox / st.radio help=).
@@ -72,9 +90,9 @@ COLUMN_HELP = {
     "TRUE_PCT_CAP": HELP["comps"],
     "PRODUCTION_VALUE_PCT_CAP": HELP["production_value"],
     "MAX_PCT_CAP": HELP["max"],
-    "SURPLUS_FAIR": "Pay minus fair value. Negative = underpaid (bargain), positive = overpaid.",
-    "SURPLUS_MARKET": "Pay minus the market-model value. Negative = bargain, positive = overpay.",
-    "SURPLUS_VALUE": "Pay minus his uncapped production worth. Negative = underpaid vs what he's worth.",
+    "SURPLUS_FAIR": "Fair value minus pay. Positive (green) = underpaid bargain, negative (red) = overpaid.",
+    "SURPLUS_MARKET": "Market value minus pay. Positive (green) = bargain, negative (red) = overpay.",
+    "SURPLUS_VALUE": "Uncapped production worth minus pay. Positive (green) = paid below what he's worth.",
     "TRAILING_vorp_3Y": "VORP (value over replacement) averaged over his last 3 seasons — total value "
                         "added vs a freely-available player, in one number.",
     "ARCHETYPE_NAME": HELP["archetype"],
@@ -123,7 +141,11 @@ def load_valuations() -> pd.DataFrame:
     v = _load("player_valuations").copy()
     v["MARKET_FAIR_PCT_CAP"] = np.maximum(
         v["MARKET_PCT_CAP"], np.minimum(v["PRODUCTION_VALUE_PCT_CAP"], v["MAX_PCT_CAP"]))
-    v["SURPLUS_FAIR"] = v["ACTUAL_PCT_CAP"] - v["MARKET_FAIR_PCT_CAP"]
+    # Surplus = fair value − actual pay, so a BARGAIN (underpaid) is POSITIVE (shown green),
+    # an overpay NEGATIVE (red). Overrides the raw (actual−fair) columns.
+    v["SURPLUS_FAIR"] = v["MARKET_FAIR_PCT_CAP"] - v["ACTUAL_PCT_CAP"]
+    v["SURPLUS_MARKET"] = v["MARKET_PCT_CAP"] - v["ACTUAL_PCT_CAP"]
+    v["SURPLUS_VALUE"] = v["PRODUCTION_VALUE_PCT_CAP"] - v["ACTUAL_PCT_CAP"]
     return v
 
 
@@ -169,18 +191,47 @@ def value_table(df: pd.DataFrame, cols, unit: str, fixed_season: str | None = No
     for c in cols:
         if c not in df.columns:
             continue
+        label = LABELS.get(c, c)
         if unit == "$ millions":
             seasons = [fixed_season] * len(df) if fixed_season else df["SEASON"].tolist()
             df[c] = [pct_to_millions(v, s) for v, s in zip(df[c], seasons)]
-            cfg[c] = st.column_config.NumberColumn(c, format="$%.1fM", help=COLUMN_HELP.get(c))
+            cfg[c] = st.column_config.NumberColumn(label, format="$%.1fM", help=COLUMN_HELP.get(c))
         else:
             df[c] = df[c] * 100.0
-            cfg[c] = st.column_config.NumberColumn(c, format="%.1f%%", help=COLUMN_HELP.get(c))
-    # tooltip-only config for other recognized columns (no reformat)
+            cfg[c] = st.column_config.NumberColumn(label, format="%.1f%%", help=COLUMN_HELP.get(c))
+    # label + tooltip for every other recognized column (no reformat)
     for c in df.columns:
-        if c not in cfg and c in COLUMN_HELP:
-            cfg[c] = st.column_config.Column(c, help=COLUMN_HELP[c])
+        if c not in cfg and (c in LABELS or c in COLUMN_HELP):
+            cfg[c] = st.column_config.Column(LABELS.get(c, c), help=COLUMN_HELP.get(c))
     return df, cfg
+
+
+_FEAT_LABELS = {
+    "TRAILING_vorp_3Y": "Trailing VORP", "TRAILING_bpm_3Y": "Trailing BPM", "TRAILING_USG_PCT_3Y": "Usage %",
+    "TRAILING_GAMES_MISSED_3Y": "Games missed", "TRAILING_DEFICIT_REL_3Y": "Availability deficit",
+    "TRAILING_AVAIL_3Y": "Availability", "MISSED_SEASONS_3Y": "Missed seasons", "N_TRAILING": "Seasons of data",
+    "AGE": "Age", "AGE2": "Age²", "YEARS_IN_LEAGUE": "Yrs in league", "DRAFT_NUMBER": "Draft pick #",
+}
+
+
+def pretty_feature(name: str) -> str:
+    """Turn a model feature / SHAP column into a plain-English label."""
+    name = name.replace("shap_", "")
+    if name.startswith("ARCH_"):
+        return "Archetype: " + name[5:]
+    return _FEAT_LABELS.get(name, name)
+
+
+def color_surplus(disp: pd.DataFrame, surplus_cols):
+    """Style: surplus columns green when positive (bargain), red when negative (overpay)."""
+    cols = [c for c in surplus_cols if c in disp.columns]
+
+    def _c(v):
+        if pd.isna(v) or v == 0:
+            return ""
+        return "color:#1a7f37;font-weight:600" if v > 0 else "color:#c0392b;font-weight:600"
+
+    return disp.style.map(_c, subset=cols) if cols else disp.style
 
 
 # ─────────────────────────── pure helpers (testable) ───────────────────────────
@@ -194,10 +245,10 @@ def pct_to_millions(pct: float, season: str) -> float | None:
 
 
 def verdict(surplus: float) -> str:
-    """Label a surplus (actual - fair): <0 underpaid (bargain), >0 overpaid."""
-    if surplus <= -0.03:
-        return "Bargain"
+    """Label a surplus (fair − actual): >0 underpaid (bargain), <0 overpaid."""
     if surplus >= 0.03:
+        return "Bargain"
+    if surplus <= -0.03:
         return "Overpay"
     return "Fair"
 
@@ -226,13 +277,14 @@ def find_comps(val: pd.DataFrame, player_id: int, season: str, k: int = 8) -> pd
 
 
 def archetype_surplus(val: pd.DataFrame, season: str | None = None) -> pd.DataFrame:
-    """Mean over/underpay by archetype (positive = market overpays the role)."""
+    """Mean surplus by archetype (new sign: positive = market underpays the role; negative = a
+    'win-now' premium / overpaid). Sorted most-overpaid (premium) first."""
     d = val if season is None else val[val["SEASON"] == season]
     g = d.groupby("ARCHETYPE_NAME")
     out = pd.DataFrame({
         "n": g.size(),
-        "mean_surplus_market": g["SURPLUS_MARKET"].mean(),
+        "mean_surplus_fair": g["SURPLUS_FAIR"].mean(),
         "mean_surplus_value": g["SURPLUS_VALUE"].mean(),
-        "pct_overpaid": g["SURPLUS_MARKET"].apply(lambda s: (s > 0).mean()),
-    }).sort_values("mean_surplus_market", ascending=False)
+        "pct_underpaid": g["SURPLUS_FAIR"].apply(lambda s: (s > 0).mean()),
+    }).sort_values("mean_surplus_fair")
     return out.round(4)

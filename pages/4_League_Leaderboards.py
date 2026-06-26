@@ -30,21 +30,23 @@ if arch != "All":
 d = d[d["ACTUAL_PCT_CAP"] >= lib.ACTUAL_FLOOR]      # drop prorated artifacts
 
 cols = ["PLAYER_NAME", "SEASON", "ARCHETYPE_NAME", "AGE", "ACTUAL_PCT_CAP", fair_col, surplus_col]
-st.caption(f"Surplus = actual − {ref.lower()}. Negative = underpaid (bargain). "
-           f"Rows below {lib.ACTUAL_FLOOR:.0%} of cap filtered out. {len(d):,} player-seasons.")
+vcols = ["ACTUAL_PCT_CAP", fair_col, surplus_col]
+st.caption(f"Surplus = {ref.lower()} − pay. **Positive (green) = underpaid bargain**, negative (red) = "
+           f"overpaid. Rows below {lib.ACTUAL_FLOOR:.0%} of cap filtered out. {len(d):,} player-seasons.")
 
 left, right = st.columns(2)
 with left:
     st.subheader("Biggest bargains")
-    disp, cfg = lib.value_table(d.nsmallest(25, surplus_col)[cols], [fair_col, surplus_col, "ACTUAL_PCT_CAP"], unit)
-    st.dataframe(disp, hide_index=True, width="stretch", column_config=cfg)
+    disp, cfg = lib.value_table(d.nlargest(25, surplus_col)[cols], vcols, unit)
+    st.dataframe(lib.color_surplus(disp, [surplus_col]), hide_index=True, width="stretch", column_config=cfg)
 with right:
     st.subheader("Biggest overpays")
-    disp, cfg = lib.value_table(d.nlargest(25, surplus_col)[cols], [fair_col, surplus_col, "ACTUAL_PCT_CAP"], unit)
-    st.dataframe(disp, hide_index=True, width="stretch", column_config=cfg)
+    disp, cfg = lib.value_table(d.nsmallest(25, surplus_col)[cols], vcols, unit)
+    st.dataframe(lib.color_surplus(disp, [surplus_col]), hide_index=True, width="stretch", column_config=cfg)
 
 st.divider()
 st.subheader("Over/underpay by archetype")
-st.caption("Positive = market overpays the role. (Veteran-style premium shows here; rookie-scale "
-           "seasons drag young-star archetypes negative — see the project notes.)")
+st.caption("Mean surplus by role — **negative = the market pays a premium / overpays the role** "
+           "(top rows), positive = underpays. Veteran 'win-now' roles read richest; rookie-scale "
+           "seasons make young-star archetypes look cheap (underpaid).")
 st.dataframe(lib.archetype_surplus(val, None if season == "All" else season), width="stretch")
