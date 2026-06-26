@@ -1,5 +1,6 @@
 """Player explorer — value lines vs the max, cap-aware verdict, career arc, SHAP 'why', comps."""
 import importlib
+import random
 
 import altair as alt
 import pandas as pd
@@ -15,10 +16,13 @@ lib.require_data()
 unit = lib.unit_toggle()
 val = lib.load_valuations()
 names = sorted(val["PLAYER_NAME"].unique())
-default = names.index("Nikola Jokić") if "Nikola Jokić" in names else 0
+if "player_select" not in st.session_state:        # land on a random recent star, not always Jokić
+    latest = lib.latest_season(val)
+    pool = val[val["SEASON"] == latest].nlargest(30, "PRODUCTION_VALUE_PCT_CAP")["PLAYER_NAME"].tolist()
+    st.session_state.player_select = random.choice(pool) if pool else names[0]
 
 c_player, c_season = st.columns([3, 1])
-player = c_player.selectbox("Player", names, index=default, help=lib.HELP["player"])
+player = c_player.selectbox("Player", names, key="player_select", help=lib.HELP["player"])
 pdf = val[val["PLAYER_NAME"] == player].sort_values("SEASON")
 pid = pdf["PLAYER_ID"].iloc[0]
 seasons = list(pdf["SEASON"])

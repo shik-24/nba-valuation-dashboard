@@ -33,13 +33,24 @@ lg_avg = team_tot.mean()
 this_tot = float(team_tot[team])
 rank = int((team_tot > this_tot).sum()) + 1
 
+def money(pct: float, signed: bool = False) -> str:
+    """Format a %cap figure per the unit toggle ($ uses the selected season's cap)."""
+    if unit == "$ millions":
+        m = lib.pct_to_millions(pct, season)
+        if m is None:
+            return "—"
+        return (f"+${m:.1f}M" if m >= 0 else f"-${abs(m):.1f}M") if signed else f"${m:.1f}M"
+    return f"{pct:+.0%} cap" if signed else f"{pct:.0%}"
+
+
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Players valued", len(roster), help="Roster players with enough recent history to value.")
-m2.metric("Payroll (% cap)", f"{roster['ACTUAL_PCT_CAP'].sum():.0%}", help=lib.HELP["payroll"])
+m2.metric("Payroll", money(roster["ACTUAL_PCT_CAP"].sum()), help=lib.HELP["payroll"])
 s_fair = roster["SURPLUS_FAIR"].sum()
-lib.metric_card(m3, "Surplus vs fair", f"{s_fair:+.0%} cap", surplus=s_fair,
+lib.metric_card(m3, "Surplus vs fair", money(s_fair, signed=True), surplus=s_fair,
                 tooltip=lib.HELP["team_surplus"], full_scale=0.5)
-m4.metric("Rank vs league", f"#{rank} / {len(team_tot)}", delta=f"{this_tot - lg_avg:+.0%} vs avg team",
+m4.metric("Rank vs league", f"#{rank} / {len(team_tot)}",
+          delta=f"{money(this_tot - lg_avg, signed=True)} vs avg team",
           help="Where this roster's total fair-surplus ranks leaguewide. Leaguewide everyone reads "
                "'underpaid' vs uncapped value, so rank/vs-average is the honest signal, not the raw sign.")
 
