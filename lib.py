@@ -27,13 +27,60 @@ SALARY_CAP = {
     "2024-25": 140_588_000, "2025-26": 154_647_000,
 }
 
-# Canonical value columns present in player_valuations (post Stage 5c).
+# Canonical value columns (post Stage 5c) + the derived cap-aware fair value.
 VALUE_COLS = {
     "ACTUAL_PCT_CAP": "Actual",
-    "MARKET_PCT_CAP": "Market (XGB)",
-    "TRUE_PCT_CAP": "True (comps)",
+    "MARKET_PCT_CAP": "Market (model)",
+    "TRUE_PCT_CAP": "Comps",
     "PRODUCTION_VALUE_PCT_CAP": "Production value",
+    "MARKET_FAIR_PCT_CAP": "Fair (cap-aware)",
     "MAX_PCT_CAP": "Max line",
+}
+# Lines drawn on the player-page chart (kept to 4 for readability).
+CHART_COLS = ["ACTUAL_PCT_CAP", "MARKET_PCT_CAP", "PRODUCTION_VALUE_PCT_CAP", "MAX_PCT_CAP"]
+
+# ── Plain-language tooltips (audience: basketball fans, not data scientists) ──
+# Widgets (st.metric / st.selectbox / st.radio help=).
+HELP = {
+    "units": "Show every number as a share of the team salary cap, or as dollars (using that season's cap).",
+    "player": "Pick any player. We can value anyone with enough recent playing history.",
+    "season": "Which season's salary and roster to show.",
+    "team": "Pick a team to see its roster's value versus what it pays.",
+    "archetype": "A playing-style group learned from tracking + box-score stats — role, not quality "
+                 "(e.g. '3-and-D wing', 'Lead on-ball guard').",
+    "value_reference": "Which 'fair pay' yardstick to grade salaries against. Cap-aware fair is the "
+                       "default; it pays the lower of a player's worth and his max.",
+    "actual": "What he is actually paid this season, as a share of the cap (his real, often older, contract).",
+    "market": "What the open market would likely pay him on a NEW deal today — based on his last 3 "
+              "seasons, age, and role. It's capped, so it under-rates true superstars.",
+    "fair": "Our headline 'what he should make': the market pays the LOWER of his worth and the max, "
+            "so stars land at the max here. Compare this to his actual pay.",
+    "production_value": "What his on-court play is worth, with NO max ceiling — so an elite player can "
+                        "read above the max (e.g. 'worth 50% of the cap').",
+    "comps": "What genuinely similar players (same role, similar production and age) actually signed for.",
+    "max": "The most he can earn this year under the CBA — 25 / 30 / 35% of the cap by years of service.",
+    "is_max_player": "His production is worth at least his max — i.e. a smart team pays him the max.",
+    "payroll": "Total of this roster's salaries as a share of the cap (only players we can value).",
+    "team_surplus": "Roster value minus what it's paid. Positive = the team gets more value than it pays for.",
+}
+
+# Table column tooltips (attached via st.column_config in value_table).
+COLUMN_HELP = {
+    "ACTUAL_PCT_CAP": HELP["actual"],
+    "MARKET_PCT_CAP": HELP["market"],
+    "MARKET_FAIR_PCT_CAP": HELP["fair"],
+    "TRUE_PCT_CAP": HELP["comps"],
+    "PRODUCTION_VALUE_PCT_CAP": HELP["production_value"],
+    "MAX_PCT_CAP": HELP["max"],
+    "SURPLUS_FAIR": "Pay minus fair value. Negative = underpaid (bargain), positive = overpaid.",
+    "SURPLUS_MARKET": "Pay minus the market-model value. Negative = bargain, positive = overpay.",
+    "SURPLUS_VALUE": "Pay minus his uncapped production worth. Negative = underpaid vs what he's worth.",
+    "TRAILING_vorp_3Y": "VORP (value over replacement) averaged over his last 3 seasons — total value "
+                        "added vs a freely-available player, in one number.",
+    "ARCHETYPE_NAME": HELP["archetype"],
+    "AGE": "Age during this season.",
+    "comp_pct_cap": "What this comparable player signed for (share of cap).",
+    "distance": "How similar this comp is — smaller means more similar.",
 }
 
 
@@ -65,7 +112,19 @@ def require_data() -> None:
 
 
 def load_valuations() -> pd.DataFrame:
-    return _load("player_valuations")
+    """player_valuations + a derived cap-aware MARKET_FAIR.
+
+    The XGB market model is censored at the max and shrinks extremes toward the mean, so it
+    under-prices genuine stars (Jokić → ~0.31, not his real max). A rational market pays the
+    LESSER of a player's worth and his max, but never below the model's fresh-market estimate:
+        MARKET_FAIR = max(MARKET, min(PRODUCTION_VALUE, MAX))
+    -> stars snap up to the max (read 'fair, paid the max'); sub-max players keep the model value.
+    """
+    v = _load("player_valuations").copy()
+    v["MARKET_FAIR_PCT_CAP"] = np.maximum(
+        v["MARKET_PCT_CAP"], np.minimum(v["PRODUCTION_VALUE_PCT_CAP"], v["MAX_PCT_CAP"]))
+    v["SURPLUS_FAIR"] = v["ACTUAL_PCT_CAP"] - v["MARKET_FAIR_PCT_CAP"]
+    return v
 
 
 def load_aging() -> pd.DataFrame:
@@ -78,6 +137,50 @@ def load_retention() -> pd.DataFrame:
 
 def load_team_lookup() -> pd.DataFrame:
     return _load("team_lookup")
+
+
+def _load_optional(name: str) -> pd.DataFrame | None:
+    """Optional enrichment tables (SHAP, comps) — return None if not exported yet."""
+    try:
+        return _load(name)
+    except FileNotFoundError:
+        return None
+
+
+def load_shap() -> pd.DataFrame | None:
+    return _load_optional("shap_values")
+
+
+def load_comps() -> pd.DataFrame | None:
+    return _load_optional("player_comps")
+
+
+# ─────────────────────────── unit toggle ($ / %cap) ───────────────────────────
+def unit_toggle():
+    return st.sidebar.radio("Units", ["% of cap", "$ millions"], horizontal=True, key="units",
+                            help=HELP["units"])
+
+
+def value_table(df: pd.DataFrame, cols, unit: str, fixed_season: str | None = None):
+    """Format %cap value columns for display per the unit toggle, and attach plain-language
+    tooltips to every recognized column. Returns (display_df, column_config) for st.dataframe."""
+    df = df.copy()
+    cfg = {}
+    for c in cols:
+        if c not in df.columns:
+            continue
+        if unit == "$ millions":
+            seasons = [fixed_season] * len(df) if fixed_season else df["SEASON"].tolist()
+            df[c] = [pct_to_millions(v, s) for v, s in zip(df[c], seasons)]
+            cfg[c] = st.column_config.NumberColumn(c, format="$%.1fM", help=COLUMN_HELP.get(c))
+        else:
+            df[c] = df[c] * 100.0
+            cfg[c] = st.column_config.NumberColumn(c, format="%.1f%%", help=COLUMN_HELP.get(c))
+    # tooltip-only config for other recognized columns (no reformat)
+    for c in df.columns:
+        if c not in cfg and c in COLUMN_HELP:
+            cfg[c] = st.column_config.Column(c, help=COLUMN_HELP[c])
+    return df, cfg
 
 
 # ─────────────────────────── pure helpers (testable) ───────────────────────────

@@ -8,23 +8,26 @@ st.set_page_config(page_title="Archetype Explorer", page_icon="🏀", layout="wi
 st.title("Archetype Explorer")
 lib.require_data()
 
+unit = lib.unit_toggle()
 val = lib.load_valuations()
 aging = lib.load_aging()
 retention = lib.load_retention()
 
 archetypes = sorted(val["ARCHETYPE_NAME"].unique())
-arch = st.selectbox("Archetype", archetypes)
+arch = st.selectbox("Archetype", archetypes, help=lib.HELP["archetype"])
 season = lib.latest_season(val)
 
 members = val[(val["ARCHETYPE_NAME"] == arch) & (val["SEASON"] == season)]
 all_seasons = val[val["ARCHETYPE_NAME"] == arch]
 
 c1, c2, c3, c4 = st.columns(4)
-c1.metric(f"Members ({season})", len(members))
+c1.metric(f"Members ({season})", len(members), help="Players in this role this season.")
 c2.metric("Mean surplus vs market", f"{all_seasons['SURPLUS_MARKET'].mean():+.1%}",
-          help="Across all seasons. Positive = market overpays this role.")
-c3.metric("Mean surplus vs value", f"{all_seasons['SURPLUS_VALUE'].mean():+.1%}")
-c4.metric("% overpaid (vs market)", f"{(all_seasons['SURPLUS_MARKET'] > 0).mean():.0%}")
+          help="Average pay minus market value, across all seasons. Positive = the market overpays this role.")
+c3.metric("Mean surplus vs value", f"{all_seasons['SURPLUS_VALUE'].mean():+.1%}",
+          help="Average pay minus uncapped production worth. Positive = overpaid vs what the role is worth.")
+c4.metric("% overpaid (vs market)", f"{(all_seasons['SURPLUS_MARKET'] > 0).mean():.0%}",
+          help="Share of this role's player-seasons paid above market value.")
 
 left, right = st.columns(2)
 
@@ -60,7 +63,9 @@ with right:
         st.caption("Share of the archetype still active by age (Stage 4 retention model).")
 
 st.subheader(f"Members · {season}")
-show = members.sort_values("PRODUCTION_VALUE_PCT_CAP", ascending=False)[
-    ["PLAYER_NAME", "AGE", "TRAILING_vorp_3Y", "ACTUAL_PCT_CAP", "MARKET_PCT_CAP",
-     "PRODUCTION_VALUE_PCT_CAP", "SURPLUS_MARKET"]]
-st.dataframe(show, hide_index=True, width="stretch")
+cols = ["PLAYER_NAME", "AGE", "TRAILING_vorp_3Y", "ACTUAL_PCT_CAP", "MARKET_FAIR_PCT_CAP",
+        "PRODUCTION_VALUE_PCT_CAP", "SURPLUS_FAIR"]
+vcols = ["ACTUAL_PCT_CAP", "MARKET_FAIR_PCT_CAP", "PRODUCTION_VALUE_PCT_CAP", "SURPLUS_FAIR"]
+disp, cfg = lib.value_table(members.sort_values("PRODUCTION_VALUE_PCT_CAP", ascending=False)[cols],
+                            vcols, unit, fixed_season=season)
+st.dataframe(disp, hide_index=True, width="stretch", column_config=cfg)
