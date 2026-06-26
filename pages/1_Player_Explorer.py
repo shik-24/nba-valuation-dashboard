@@ -89,6 +89,26 @@ arc = alt.Chart(pdf).mark_line(point=alt.OverlayMarkDef(size=90), color="#888").
 st.altair_chart(arc, width="stretch")
 st.caption("How his role (archetype) shifted season to season.")
 
+# ── why this archetype (#6): top distinguishing role traits ──
+why = lib.load_why()
+if why is not None:
+    w = why[(why["PLAYER_ID"] == pid) & (why["SEASON"] == season)]
+    if w.empty:                                   # fall back to the player's most recent clustered season
+        wany = why[why["PLAYER_ID"] == pid]
+        w = wany[wany["SEASON"] == wany["SEASON"].max()] if not wany.empty else w
+    if not w.empty:
+        st.subheader(f"Why he's a {row['ARCHETYPE_NAME']}")
+        w = w.copy()
+        w["label"] = w["feature"].map(lib.role_label)
+        bar = alt.Chart(w).mark_bar().encode(
+            x=alt.X("z:Q", title="vs league average (standard deviations)"),
+            y=alt.Y("label:N", sort="-x", title=None),
+            color=alt.condition(alt.datum.z > 0, alt.value("#1f77b4"), alt.value("#c0392b")),
+            tooltip=[alt.Tooltip("label:N", title="Trait"), alt.Tooltip("z:Q", title="vs league", format="+.1f")])
+        st.altair_chart(bar, width="stretch")
+        st.caption("How his playing-style stats compare to the league — the traits that place him "
+                   "in this archetype (blue = more than average, red = less).")
+
 # ── SHAP 'why' (precomputed; readable labels) ──
 st.subheader("Why the market values him here")
 shap = lib.load_shap()

@@ -178,6 +178,29 @@ def load_comps() -> pd.DataFrame | None:
     return _load_optional("player_comps")
 
 
+def load_why() -> pd.DataFrame | None:
+    return _load_optional("archetype_why")
+
+
+# Plain-English labels for the Stage 3 role/style features (for "why this archetype").
+ROLE_LABELS = {
+    "PLAYER_HEIGHT_INCHES": "Height", "PLAYER_WEIGHT": "Weight", "USG_PCT": "Usage %",
+    "AST_PCT": "Assist %", "AST_TO": "Assist-to-TO", "PCT_FGA_3PT": "% of shots from 3",
+    "PCT_PTS_PAINT": "% pts in paint", "PCT_PTS_3PT": "% pts from 3", "PCT_PTS_FT": "% pts from FTs",
+    "PCT_PTS_FB": "% pts on fast break", "PCT_PTS_OFF_TOV": "% pts off turnovers",
+    "PCT_UAST_2PM": "% unassisted 2s", "PCT_UAST_3PM": "% unassisted 3s", "PCT_AST_3PM": "% of 3s assisted",
+    "OREB_PCT": "Off. rebound %", "DREB_PCT": "Def. rebound %", "STL": "Steals", "BLK": "Blocks",
+    "PFD": "Fouls drawn", "MIN_PG": "Minutes/game", "DRIVES": "Drives", "DRIVE_PASSES": "Drive passes",
+    "DRIVE_AST": "Drive assists", "DRIVE_PTS": "Drive points", "CATCH_SHOOT_FGA": "Catch-&-shoot FGA",
+    "CATCH_SHOOT_FG3A": "Catch-&-shoot 3PA", "DEFLECTIONS_PG": "Deflections", "CONTESTED_SHOTS_PG": "Contested shots",
+    "SCREEN_ASSISTS_PG": "Screen assists", "BOX_OUTS_PG": "Box-outs",
+}
+
+
+def role_label(f: str) -> str:
+    return ROLE_LABELS.get(f, f)
+
+
 # ─────────────────────────── unit toggle ($ / %cap) ───────────────────────────
 def unit_toggle():
     return st.sidebar.radio("Units", ["% of cap", "$ millions"], horizontal=True, key="units",
